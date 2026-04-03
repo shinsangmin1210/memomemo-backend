@@ -25,4 +25,16 @@ public interface ChannelRepository extends JpaRepository<Channel, Long> {
                                          @Param("userId") Long userId);
 
     boolean existsByWorkspaceIdAndName(Long workspaceId, String name);
+
+    // 두 사용자 간 기존 DM 채널 조회
+    @Query("""
+            SELECT c FROM Channel c
+            WHERE c.workspace.id = :workspaceId
+              AND c.isDirect = true
+              AND EXISTS (SELECT 1 FROM ChannelMember cm1 WHERE cm1.channel = c AND cm1.user.id = :userA)
+              AND EXISTS (SELECT 1 FROM ChannelMember cm2 WHERE cm2.channel = c AND cm2.user.id = :userB)
+            """)
+    java.util.Optional<Channel> findDmChannel(@Param("workspaceId") Long workspaceId,
+                                               @Param("userA") Long userA,
+                                               @Param("userB") Long userB);
 }

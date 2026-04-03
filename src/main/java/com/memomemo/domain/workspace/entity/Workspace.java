@@ -43,4 +43,8 @@ public class Workspace {
         this.slug = slug;
         this.owner = owner;
     }
+
+    public void updateName(String name) {
+        this.name = name;
+    }
 }

@@ -88,6 +88,14 @@ public class User {
         this.isActive = false;
     }
 
+    public void activate() {
+        this.isActive = true;
+    }
+
+    public void changeRole(String role) {
+        this.role = role;
+    }
+
 //    public boolean isOauthUser() {
 //        return this.oauthProvider != null;
 //    }

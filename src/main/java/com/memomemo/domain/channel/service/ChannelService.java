@@ -110,6 +110,60 @@ public class ChannelService {
         channelMemberRepository.deleteByChannelIdAndUserId(channelId, targetUserId);
     }
 
+    /**
+     * 두 사용자 간 DM 채널을 조회하거나, 없으면 새로 생성한다.
+     * DM 채널명은 "dm-{작은id}-{큰id}" 형태로 자동 생성된다.
+     */
+    @Transactional
+    public ChannelResponse getOrCreateDm(Long workspaceId, Long requesterId, Long targetUserId) {
+        if (requesterId.equals(targetUserId)) {
+            throw new IllegalArgumentException("자기 자신에게 DM을 보낼 수 없습니다.");
+        }
+
+        // 기존 DM 채널 조회
+        return channelRepository.findDmChannel(workspaceId, requesterId, targetUserId)
+                .map(ChannelResponse::from)
+                .orElseGet(() -> createDmChannel(workspaceId, requesterId, targetUserId));
+    }
+
+    private ChannelResponse createDmChannel(Long workspaceId, Long requesterId, Long targetUserId) {
+        Workspace workspace = workspaceRepository.findById(workspaceId)
+                .orElseThrow(() -> new ResourceNotFoundException("워크스페이스", workspaceId));
+        User requester = findUser(requesterId);
+        User target = findUser(targetUserId);
+
+        Long smaller = Math.min(requesterId, targetUserId);
+        Long larger = Math.max(requesterId, targetUserId);
+        String dmName = "dm-" + smaller + "-" + larger;
+
+        Channel channel = channelRepository.save(
+                Channel.builder()
+                        .workspace(workspace)
+                        .name(dmName)
+                        .isPrivate(true)
+                        .isDirect(true)
+                        .createdBy(requester)
+                        .build()
+        );
+
+        channelMemberRepository.save(
+                ChannelMember.builder()
+                        .channel(channel)
+                        .user(requester)
+                        .role(ChannelMember.ChannelRole.OWNER)
+                        .build()
+        );
+        channelMemberRepository.save(
+                ChannelMember.builder()
+                        .channel(channel)
+                        .user(target)
+                        .role(ChannelMember.ChannelRole.MEMBER)
+                        .build()
+        );
+
+        return ChannelResponse.from(channel);
+    }
+
     private Channel findById(Long channelId) {
         return channelRepository.findById(channelId)
                 .orElseThrow(() -> new ResourceNotFoundException("채널", channelId));

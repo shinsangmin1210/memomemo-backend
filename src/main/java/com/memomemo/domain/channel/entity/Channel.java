@@ -33,6 +33,9 @@ public class Channel {
     @Column(name = "is_private", nullable = false)
     private boolean isPrivate = false;
 
+    @Column(name = "is_direct", nullable = false)
+    private boolean isDirect = false;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_by", nullable = false)
     private User createdBy;
@@ -47,11 +50,12 @@ public class Channel {
 
     @Builder
     public Channel(Workspace workspace, String name, String description,
-                   boolean isPrivate, User createdBy) {
+                   boolean isPrivate, boolean isDirect, User createdBy) {
         this.workspace = workspace;
         this.name = name;
         this.description = description;
         this.isPrivate = isPrivate;
+        this.isDirect = isDirect;
         this.createdBy = createdBy;
     }
 

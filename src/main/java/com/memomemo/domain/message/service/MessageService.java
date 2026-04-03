@@ -5,11 +5,13 @@ import com.memomemo.domain.channel.repository.ChannelMemberRepository;
 import com.memomemo.domain.channel.repository.ChannelRepository;
 import com.memomemo.domain.message.dto.MessageRequest;
 import com.memomemo.domain.message.dto.MessageResponse;
+import com.memomemo.domain.message.dto.NotificationEvent;
 import com.memomemo.domain.message.dto.ThreadMessageRequest;
 import com.memomemo.domain.message.entity.Attachment;
 import com.memomemo.domain.message.entity.Message;
 import com.memomemo.domain.message.repository.AttachmentRepository;
 import com.memomemo.domain.message.repository.MessageRepository;
+import com.memomemo.domain.notification.service.NotificationService;
 import com.memomemo.domain.user.entity.User;
 import com.memomemo.domain.user.repository.UserRepository;
 import com.memomemo.global.exception.ResourceNotFoundException;
@@ -20,19 +22,26 @@ import org.springframework.data.domain.Slice;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 public class MessageService {
 
     private static final int PAGE_SIZE = 50;
+    private static final Pattern MENTION_PATTERN = Pattern.compile("@(\\w+)");
 
     private final MessageRepository messageRepository;
     private final ChannelRepository channelRepository;
     private final ChannelMemberRepository channelMemberRepository;
     private final UserRepository userRepository;
     private final AttachmentRepository attachmentRepository;
+    private final NotificationService notificationService;
 
     @Transactional(readOnly = true)
     public Slice<MessageResponse> getMessages(Long channelId, Long cursor, Long userId) {
@@ -63,7 +72,9 @@ public class MessageService {
             attachment.linkMessage(message);
         }
 
-        return MessageResponse.from(message, attachment);
+        MessageResponse response = MessageResponse.from(message, attachment);
+        sendMentionNotifications(request.content(), message, user);
+        return response;
     }
 
     @Transactional
@@ -82,7 +93,10 @@ public class MessageService {
                         .parent(parent)
                         .build()
         );
-        return MessageResponse.from(message);
+
+        MessageResponse response = MessageResponse.from(message);
+        sendMentionNotifications(request.content(), message, user);
+        return response;
     }
 
     @Transactional(readOnly = true)
@@ -140,5 +154,41 @@ public class MessageService {
         if (!message.getUser().getId().equals(userId)) {
             throw new UnauthorizedException("본인 메시지만 수정/삭제할 수 있습니다.");
         }
+    }
+
+    /**
+     * 메시지 content에서 @username 패턴을 파싱하여 해당 사용자에게 MENTION SSE 알림을 발송한다.
+     * 발신자 본인은 제외한다.
+     */
+    private void sendMentionNotifications(String content, Message message, User sender) {
+        Set<String> mentionedUsernames = parseMentions(content);
+        if (mentionedUsernames.isEmpty()) return;
+
+        String preview = content.length() > 100 ? content.substring(0, 100) + "…" : content;
+
+        for (String username : mentionedUsernames) {
+            userRepository.findByUsername(username).ifPresent(mentionedUser -> {
+                if (!mentionedUser.getId().equals(sender.getId())) {
+                    NotificationEvent event = new NotificationEvent(
+                            "MENTION",
+                            message.getChannel().getId(),
+                            message.getId(),
+                            sender.getId(),
+                            sender.getDisplayName(),
+                            preview,
+                            OffsetDateTime.now(),
+                            null
+                    );
+                    notificationService.send(mentionedUser.getId(), event);
+                }
+            });
+        }
+    }
+
+    private Set<String> parseMentions(String content) {
+        Matcher matcher = MENTION_PATTERN.matcher(content);
+        return matcher.results()
+                .map(r -> r.group(1))
+                .collect(Collectors.toSet());
     }
 }

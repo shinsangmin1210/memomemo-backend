@@ -3,6 +3,7 @@ package com.memomemo.domain.channel.controller;
 import com.memomemo.domain.channel.dto.ChannelMemberRequest;
 import com.memomemo.domain.channel.dto.ChannelRequest;
 import com.memomemo.domain.channel.dto.ChannelResponse;
+import com.memomemo.domain.channel.dto.DmRequest;
 import com.memomemo.domain.channel.service.ChannelService;
 import com.memomemo.global.security.AuthUser;
 import jakarta.validation.Valid;
@@ -32,6 +33,14 @@ public class ChannelController {
                                                           @Valid @RequestBody ChannelRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(channelService.createChannel(workspaceId, authUser.id(), request));
+    }
+
+    @PostMapping("/api/v1/workspaces/{workspaceId}/dm")
+    public ResponseEntity<ChannelResponse> getOrCreateDm(@PathVariable Long workspaceId,
+                                                          @AuthenticationPrincipal AuthUser authUser,
+                                                          @Valid @RequestBody DmRequest request) {
+        return ResponseEntity.ok(
+                channelService.getOrCreateDm(workspaceId, authUser.id(), request.targetUserId()));
     }
 
     @GetMapping("/api/v1/channels/{channelId}")
